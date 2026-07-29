@@ -1,0 +1,91 @@
+name: Compilar APK
+
+# Uso personal: genera un APK instalable y lo deja como artifact descargable.
+# No se publica en ninguna tienda.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # boton "Run workflow" en la pestana Actions
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Sin esto, cada ejecucion genera una keystore nueva y el APK sale con otra
+      # firma: Android rechaza instalarlo encima del anterior ("app no instalada")
+      # y habria que desinstalar, perdiendo el capital y el registro guardados.
+      - name: Reutilizar la keystore de firma
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
+
+      - name: Crear la keystore la primera vez
+        run: |
+          if [ ! -f ~/.android/debug.keystore ]; then
+            mkdir -p ~/.android
+            keytool -genkey -v -keystore ~/.android/debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            echo "keystore creada"
+          else
+            echo "keystore reutilizada de la cache"
+          fi
+          keytool -list -v -keystore ~/.android/debug.keystore \
+            -storepass android -alias androiddebugkey | grep -i "SHA256:" | head -1
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobar tipos
+        run: npx tsc --noEmit
+
+      # La paridad con el motor Python se verifica en local (necesita el Python
+      # instalado y datos capturados). Aqui solo se comprueba que compila.
+
+      - name: Compilar web
+        run: npx vite build
+
+      - name: Generar proyecto Android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Compilar APK (debug, autofirmado)
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Renombrar
+        run: |
+          mkdir -p salida
+          cp android/app/build/outputs/apk/debug/app-debug.apk \
+             "salida/xrp-$(date +%Y%m%d-%H%M).apk"
+          ls -lh salida/
+
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: xrp-apk
+          path: salida/*.apk
+          retention-days: 90

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+android/
+.DS_Store
+*.log
+
+# Fixture de paridad: se regenera con `npm run paridad` (necesita el motor Python
+# local). Son ~4 MB de velas que no aportan nada al repo.
+tools/paridad/fixture.json

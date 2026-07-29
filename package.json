@@ -1,0 +1,26 @@
+{
+  "name": "xrp-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Estrategia XRPUSD sobre Bitget - uso personal, sin ejecucion de ordenes",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "sync": "cap sync android",
+    "apk": "cd android && ./gradlew assembleDebug",
+    "paridad": "python tools/paridad/capturar.py && tsx tools/paridad/comparar.ts"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/cli": "^6.2.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/preferences": "^6.0.3"
+  }
+}

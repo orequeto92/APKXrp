@@ -1,0 +1,182 @@
+/* Sistema de scalping - interfaz movil, tema oscuro.
+   Prioridad: leer una senal de un vistazo, con los numeros que se teclean en
+   Bitget destacados sobre todo lo demas. */
+
+:root {
+  --bg: #0b0f14;
+  --bg2: #121820;
+  --bg3: #1a222d;
+  --linea: #263140;
+  --txt: #e6edf5;
+  --txt2: #93a2b5;
+  --txt3: #63718a;
+  --verde: #2ecc8f;
+  --rojo: #ff5c6c;
+  --ambar: #f5b544;
+  --azul: #4aa8ff;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding-top: calc(56px + var(--safe-top));
+  padding-bottom: calc(64px + var(--safe-bot));
+  overscroll-behavior-y: none;
+}
+
+/* ------------------------------------------------------------- cabecera */
+#cabecera {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  padding: calc(8px + var(--safe-top)) 14px 8px;
+  background: rgba(11, 15, 20, .92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--linea);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: calc(56px + var(--safe-top));
+}
+.cab-t { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+.cab-s { font-size: 11.5px; color: var(--txt2); }
+.cab-cap { text-align: right; }
+.cab-cap b { font-size: 17px; color: var(--verde); font-variant-numeric: tabular-nums; }
+.cab-cap span { display: block; font-size: 10.5px; color: var(--txt3); }
+
+/* ------------------------------------------------------------- layout */
+#vista { padding: 12px 12px 20px; max-width: 640px; margin: 0 auto; }
+.card {
+  background: var(--bg2); border: 1px solid var(--linea);
+  border-radius: 14px; padding: 14px; margin-bottom: 12px;
+}
+.card.acento { border-color: #2c4a63; }
+h2 { font-size: 15px; font-weight: 650; margin-bottom: 10px; }
+h3 { font-size: 13px; font-weight: 600; color: var(--txt2); margin: 14px 0 8px; }
+p { color: var(--txt2); font-size: 13.5px; }
+.mini { font-size: 12px; color: var(--txt3); }
+.centro { text-align: center; }
+.mt { margin-top: 12px; }
+
+/* ------------------------------------------------------------- setups */
+.setup-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.badge {
+  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+  background: var(--bg3); color: var(--txt2);
+}
+.badge.aplus { background: #10402f; color: var(--verde); }
+.badge.a { background: #10402f; color: var(--verde); }
+.badge.b { background: #3d3013; color: var(--ambar); }
+.badge.long { background: #10402f; color: var(--verde); }
+.badge.short { background: #401518; color: var(--rojo); }
+.sym { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+.score { margin-left: auto; font-size: 11.5px; color: var(--txt3); }
+
+.niveles { display: grid; gap: 1px; background: var(--linea); border-radius: 10px; overflow: hidden; }
+.nivel {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 9px 11px; background: var(--bg2);
+}
+.nivel .k { font-size: 12px; color: var(--txt2); }
+.nivel .v { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.nivel.entrada { background: #10243a; }
+.nivel.entrada .v { color: var(--azul); font-size: 17px; }
+.nivel.sl .v { color: var(--rojo); }
+.nivel.tp .v { color: var(--verde); }
+.nivel.cant { background: var(--bg3); }
+.nivel.cant .v { color: var(--txt); font-size: 16px; }
+.nivel .sub { font-size: 11px; color: var(--txt3); font-weight: 400; margin-left: 6px; }
+
+.datos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.dato { background: var(--bg3); border-radius: 9px; padding: 8px 9px; }
+.dato .k { font-size: 10.5px; color: var(--txt3); display: block; }
+.dato .v { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.v.pos { color: var(--verde); } .v.neg { color: var(--rojo); }
+
+.confs { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+.conf {
+  font-size: 11px; padding: 3px 7px; border-radius: 6px;
+  background: var(--bg3); color: var(--txt2);
+}
+
+/* ------------------------------------------------------------- avisos */
+.aviso {
+  border-radius: 10px; padding: 10px 12px; font-size: 12.5px;
+  margin-bottom: 10px; border: 1px solid;
+}
+.aviso.rojo { background: #2a1114; border-color: #5c2028; color: #ffb3ba; }
+.aviso.ambar { background: #2a2211; border-color: #5c4a20; color: #ffdc9e; }
+.aviso.azul { background: #10243a; border-color: #24486e; color: #b3d9ff; }
+.aviso.verde { background: #0f2a20; border-color: #1d5340; color: #a7e8cd; }
+
+/* ------------------------------------------------------------- formularios */
+label { display: block; font-size: 12px; color: var(--txt2); margin: 10px 0 5px; }
+input, select, textarea {
+  width: 100%; padding: 11px 12px; font-size: 16px; color: var(--txt);
+  background: var(--bg3); border: 1px solid var(--linea); border-radius: 10px;
+  font-variant-numeric: tabular-nums; font-family: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--azul); }
+.fila { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+button {
+  width: 100%; padding: 13px; font-size: 15px; font-weight: 650;
+  color: #04120c; background: var(--verde); border: 0; border-radius: 11px;
+  margin-top: 14px; cursor: pointer; font-family: inherit;
+}
+button:active { opacity: .82; }
+button.sec { background: var(--bg3); color: var(--txt); }
+button.peligro { background: var(--rojo); color: #fff; }
+button.mini { width: auto; padding: 7px 12px; font-size: 12.5px; margin: 0; }
+button:disabled { opacity: .45; }
+.botones { display: flex; gap: 8px; margin-top: 12px; }
+
+/* ------------------------------------------------------------- tabla / registro */
+.op { border-bottom: 1px solid var(--linea); padding: 11px 0; }
+.op:last-child { border-bottom: 0; }
+.op-cab { display: flex; align-items: center; gap: 7px; }
+.op-cab .sym { font-size: 14px; }
+.op-pnl { margin-left: auto; font-weight: 650; font-variant-numeric: tabular-nums; }
+.op-det { font-size: 11.5px; color: var(--txt3); margin-top: 3px; }
+
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.stat { background: var(--bg3); border-radius: 10px; padding: 11px; }
+.stat .k { font-size: 11px; color: var(--txt3); display: block; }
+.stat .v { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------- estrategia */
+.regla { display: flex; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--linea); font-size: 13.5px; }
+.regla:last-child { border: 0; }
+.regla .n {
+  flex: 0 0 21px; height: 21px; border-radius: 6px; background: var(--bg3);
+  color: var(--txt2); font-size: 11px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.nota { font-size: 13px; color: var(--txt2); padding: 9px 0; border-bottom: 1px solid var(--linea); }
+.nota:last-child { border: 0; }
+.nota b { color: var(--txt); display: block; margin-bottom: 3px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* ------------------------------------------------------------- tabs */
+#tabs {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  background: rgba(11, 15, 20, .95); backdrop-filter: blur(12px);
+  border-top: 1px solid var(--linea);
+  padding-bottom: var(--safe-bot);
+}
+.tab {
+  padding: 9px 2px 8px; text-align: center; color: var(--txt3);
+  font-size: 10.5px; cursor: pointer; border: 0; background: none;
+  width: auto; margin: 0; font-weight: 500;
+}
+.tab .i { display: block; font-size: 19px; line-height: 1.15; }
+.tab.on { color: var(--azul); }
+
+.cargando { text-align: center; padding: 40px 20px; color: var(--txt3); font-size: 13.5px; }
+.spin {
+  width: 26px; height: 26px; margin: 0 auto 12px;
+  border: 2.5px solid var(--linea); border-top-color: var(--azul);
+  border-radius: 50%; animation: giro .8s linear infinite;
+}
+@keyframes giro { to { transform: rotate(360deg); } }

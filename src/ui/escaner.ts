@@ -4,9 +4,47 @@
  */
 import { evaluar, type Senal } from "../engine/signal.js";
 import { estadoClarity, type Clarity } from "../engine/clarity.js";
+import { detectar, slEstructural, type Lado } from "../engine/ruptura.js";
+import { getCandles } from "../engine/bitget.js";
+import { compute } from "../engine/ta.js";
 import { actuales } from "../config/params.js";
 import { cargar, abrir, estadisticas } from "../store/store.js";
 import { html, esc, precio, usd, pct, acciones, cargando } from "./comun.js";
+
+interface AvisoRuptura {
+  lado: Lado;
+  diasActivo: number;
+  price: number;
+  sl: number;
+  slPct: number;
+  atr1dPct: number | null;
+}
+
+/**
+ * Regimen RUPTURA (ver engine/ruptura.ts) — EXCLUYENTE del sistema normal de
+ * arriba. Muy poco frecuente (2 episodios reales en ~3 anios de historico), asi
+ * que si aparece merece un aviso propio y bien visible, no mezclado en el score.
+ */
+async function chequearRuptura(symbol: string): Promise<AvisoRuptura | null> {
+  try {
+    const [c1d, c4h] = await Promise.all([getCandles(symbol, "1D", 300), getCandles(symbol, "4H", 320)]);
+    if (c1d.length < 90 || c4h.length < 30) return null;
+    const r = detectar(c1d);
+    const n = r.activo.length;
+    if (!r.activo[n - 1] || !r.lado[n - 1]) return null;
+    const lado: Lado = r.lado[n - 1] === "ALCISTA" ? "long" : "short";
+    let diasActivo = 0;
+    for (let i = n - 1; i >= 0 && r.activo[i]; i--) diasActivo++;
+
+    const m4 = compute(symbol, "4H", c4h);
+    if (!m4) return null;
+    const atr1dPct = r.atrPct[n - 1];
+    const { sl, distPct } = slEstructural(m4.price, lado, m4, atr1dPct);
+    return { lado, diasActivo, price: m4.price, sl, slPct: distPct, atr1dPct };
+  } catch {
+    return null;   // aviso opcional: si falla, el escaner normal sigue funcionando
+  }
+}
 
 let ultima: Senal | null = null;
 
@@ -30,8 +68,9 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
   const st = estadisticas(estado);
 
   let s: Senal;
+  let ruptura: AvisoRuptura | null = null;
   try {
-    s = await evaluar(estado.saldo, p);
+    [s, ruptura] = await Promise.all([evaluar(estado.saldo, p), chequearRuptura(p.SYMBOL)]);
     ultima = s;
   } catch (e) {
     raiz.innerHTML = html`<div class="card">
@@ -73,6 +112,25 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
         El análisis técnico no se ve afectado.</p>
     </div>`;
 
+  const avisoRuptura = ruptura ? html`
+    <div class="card" style="border-left:3px solid var(--rojo)">
+      <h2>🚨 RÉGIMEN RUPTURA activo</h2>
+      <p class="mini">Tendencia violenta confirmada (tipo el rally de XRP nov-2024, +69% en
+        46 días) — <b>diferente al sistema normal de arriba</b>: sin premium/discount, sin TP fijo,
+        gestión por trailing. Ver el detalle en la pestaña Reglas.</p>
+      <div class="stats">
+        <div class="stat"><span class="k">Lado</span><span class="v">${esc(ruptura.lado.toUpperCase())}</span></div>
+        <div class="stat"><span class="k">Días confirmado</span><span class="v">${ruptura.diasActivo}</span></div>
+        <div class="stat"><span class="k">Precio</span><span class="v">${precio(ruptura.price)}</span></div>
+        <div class="stat"><span class="k">SL sugerido</span>
+          <span class="v neg">${precio(ruptura.sl)} (${pct(ruptura.slPct, 1)})</span></div>
+      </div>
+      <p class="mini mt">Riesgo inicial: la <b>mitad</b> de tu riesgo normal (confirmación real, pero
+        sigue siendo la parte más incierta). Se escala a riesgo completo solo si, 5+ días después,
+        sigue confirmado y avanzó 5%+ más a favor. SL a break-even tras avanzar 1R, luego sigue
+        el último swing de 4H. <b>Tú colocas la orden en Bitget</b> — la app nunca opera.</p>
+    </div>` : "";
+
   const avisoAbierta = st.abierta ? html`
     <div class="card" style="border-left:3px solid var(--ambar)">
       <b>Ya tienes una posición abierta</b>
@@ -108,6 +166,7 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
     </div>` : "";
 
   raiz.innerHTML = html`
+    ${avisoRuptura}
     ${avisoAbierta}
     <div class="card centro">
       <span class="mini">${esc(p.TRADE_PAIR)}</span>

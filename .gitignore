@@ -8,3 +8,4 @@ android/
 # local). Son ~4 MB de velas que no aportan nada al repo.
 tools/paridad/fixture.json
 tools/paridad/fixture_ruptura.json
+tools/paridad/fixture_impulso.json

@@ -5,6 +5,7 @@
 import { evaluar, type Senal } from "../engine/signal.js";
 import { estadoClarity, type Clarity } from "../engine/clarity.js";
 import { detectar, slEstructural, type Lado } from "../engine/ruptura.js";
+import { señal as señalImpulso, type SeñalImpulso } from "../engine/impulso.js";
 import { getCandles } from "../engine/bitget.js";
 import { compute } from "../engine/ta.js";
 import { actuales } from "../config/params.js";
@@ -46,6 +47,22 @@ async function chequearRuptura(symbol: string): Promise<AvisoRuptura | null> {
   }
 }
 
+/**
+ * Sistema EXPERIMENTAL (ver engine/impulso.ts). Reconstruido de un documento
+ * externo; probado fuera de la ventana con la que fue disenado y NO mostro
+ * ventaja real (ruido estadistico, +0.012 R/oper). Se muestra igual, a peticion
+ * explicita del usuario, porque genera mas senales que el sistema normal -- pero
+ * SIEMPRE marcado como experimental, nunca como una senal confiable.
+ */
+async function chequearImpulso(symbol: string, btcSymbol: string): Promise<SeñalImpulso | null> {
+  try {
+    const [c4h, c4hBtc] = await Promise.all([getCandles(symbol, "4H", 300), getCandles(btcSymbol, "4H", 300)]);
+    return señalImpulso(c4h, c4hBtc);
+  } catch {
+    return null;   // aviso opcional: si falla, el escaner normal sigue funcionando
+  }
+}
+
 let ultima: Senal | null = null;
 
 const COLOR: Record<string, string> = {
@@ -69,8 +86,11 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
 
   let s: Senal;
   let ruptura: AvisoRuptura | null = null;
+  let impulso: SeñalImpulso | null = null;
   try {
-    [s, ruptura] = await Promise.all([evaluar(estado.saldo, p), chequearRuptura(p.SYMBOL)]);
+    [s, ruptura, impulso] = await Promise.all([
+      evaluar(estado.saldo, p), chequearRuptura(p.SYMBOL), chequearImpulso(p.SYMBOL, p.DIRECTOR_SYMBOL),
+    ]);
     ultima = s;
   } catch (e) {
     raiz.innerHTML = html`<div class="card">
@@ -129,6 +149,23 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
         sigue siendo la parte más incierta). Se escala a riesgo completo solo si, 5+ días después,
         sigue confirmado y avanzó 5%+ más a favor. SL a break-even tras avanzar 1R, luego sigue
         el último swing de 4H. <b>Tú colocas la orden en Bitget</b> — la app nunca opera.</p>
+    </div>` : "";
+
+  const avisoImpulso = impulso ? html`
+    <div class="card" style="border-left:3px solid var(--ambar)">
+      <h2>🧪 EXPERIMENTAL — señal IMPULSO</h2>
+      <p class="mini"><b>Sin ventaja demostrada.</b> Se probó fuera del período con el que se
+        construyó y quedó en ruido estadístico (+0.012 R/operación) — trátalo como informativo,
+        no como señal confiable. Se muestra porque genera más señales que el sistema normal.</p>
+      <div class="stats">
+        <div class="stat"><span class="k">Lado</span><span class="v">${esc(impulso.lado.toUpperCase())}</span></div>
+        <div class="stat"><span class="k">Entrada</span><span class="v">${precio(impulso.entrada)}</span></div>
+        <div class="stat"><span class="k">SL</span><span class="v neg">${precio(impulso.sl)}</span></div>
+        <div class="stat"><span class="k">TP</span><span class="v pos">${precio(impulso.tp)}</span></div>
+      </div>
+      <p class="mini mt">ATR exp ${impulso.atrExp.toFixed(2)} · Eficiencia(3) ${impulso.eff.toFixed(2)} ·
+        RVOL ${impulso.rvol.toFixed(2)}. Gestión fija (sin break-even ni trailing).
+        <b>Tú colocas la orden en Bitget</b> — la app nunca opera.</p>
     </div>` : "";
 
   const avisoAbierta = st.abierta ? html`
@@ -198,6 +235,8 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
     ${bloqueClarity}
 
     ${bloqueSetup}
+
+    ${avisoImpulso}
 
     <p class="mini centro" style="margin:14px 4px">
       Material educativo, no asesoría financiera. La app solo lee datos públicos.

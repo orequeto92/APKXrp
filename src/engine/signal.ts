@@ -9,7 +9,7 @@
  * o app y bot daran senales distintas. `npm run paridad` compara ambos.
  */
 import { getCandles, getTicker, getFunding, getContratos, type Contrato } from "./bitget.js";
-import { compute, type Metrics } from "./ta.js";
+import { compute, type Metrics, type Candle } from "./ta.js";
 import { dimensionar, type Tamano } from "./sizing.js";
 import type { Params } from "../config/params.js";
 
@@ -49,6 +49,7 @@ interface Datos {
   oi: number | null;
   chg24: number | null;
   tf: Record<string, Metrics | null>;
+  candles: Record<string, Candle[]>;
 }
 
 const num = (s: string | undefined): number | null => {
@@ -76,8 +77,10 @@ async function medir(symbol: string, f: Fuente): Promise<Datos> {
   const tk = await f.ticker(symbol);
   const funding = await f.funding(symbol);
   const tf: Record<string, Metrics | null> = {};
+  const candles: Record<string, Candle[]> = {};
   for (const [nombre, gran] of TFS) {
     const velas = await f.velas(symbol, gran, 300);
+    candles[nombre] = velas;
     tf[nombre] = velas.length >= 30 ? compute(symbol, nombre, velas) : null;
   }
   const precio = num(tk.lastPr);
@@ -88,7 +91,32 @@ async function medir(symbol: string, f: Fuente): Promise<Datos> {
     oi: oiBase != null && precio != null ? oiBase * precio : null,
     chg24: num(tk.change24h),
     tf,
+    candles,
   };
+}
+
+const DIVERGENCIA_LB = 5;   // velas de 4H hacia atras para medir si BTC acompana
+
+function retorno(candles: Candle[], lookback: number): number | null {
+  if (candles.length < lookback + 1) return null;
+  const c = candles.map((x) => x.map(Number) as unknown as Candle);
+  return (Number(c[c.length - 1][4]) / Number(c[c.length - 1 - lookback][4]) - 1) * 100;
+}
+
+/**
+ * True si BTC NO acompana el movimiento reciente de XRP en la direccion del
+ * lado propuesto. Validado con replay_combinado.py (Python) sobre nov-2024 ->
+ * ago-2026: +7.00R netos (9 perdedoras evitadas por cada 2 ganadoras).
+ */
+export function divergente(velasSym: Candle[], velasDir: Candle[], lado: "long" | "short",
+                            lookback = DIVERGENCIA_LB): boolean {
+  const rx = retorno(velasSym, lookback);
+  const rb = retorno(velasDir, lookback);
+  if (rx === null || rb === null) return false;
+  const rbFavor = lado === "long" ? rb : -rb;
+  const rxFavor = lado === "long" ? rx : -rx;
+  const acompana = (rxFavor > 0) === (rbFavor > 0) && rbFavor > 0;
+  return !acompana;
 }
 
 function semaforo(btc: Datos): ["VERDE" | "AMARILLO" | "ROJO", number] {
@@ -218,6 +246,14 @@ export async function evaluar(
         reason: `el 1D esta en premium profundo (${pos1d.toFixed(0)}% del rango): no se compra ` +
                 `lo que esta caro en el marco grande.` };
     }
+  }
+
+  // BTC confirmation: XRP moviendose solo, sin que BTC acompane en las ultimas
+  // velas de 4H, es sospechoso de ruido especifico del activo (validado: +7R
+  // netos sobre nov-2024 -> ago-2026).
+  if (divergente(sym.candles["4H"] || [], btc.candles["4H"] || [], lado)) {
+    return { ...res, decision: "NO-TRADE", side: lado,
+      reason: `XRP diverge de BTC (${DIVERGENCIA_LB} velas 4H): movimiento no confirmado por el mercado.` };
   }
 
   // --- construir la operacion ---

@@ -50,11 +50,27 @@ async function get(path: string, params: Record<string, string>): Promise<any> {
   throw new Error(`Bitget no responde: ${String(ultimo)}`);
 }
 
+// Duracion en ms por granularidad -- para descartar la vela EN CURSO (ver abajo).
+const DUR_MS: Record<string, number> = {
+  "15m": 900_000, "1H": 3_600_000, "4H": 14_400_000, "1D": 86_400_000, "1W": 604_800_000,
+};
+
 export async function getCandles(symbol: string, gran: string, limit = 300): Promise<Candle[]> {
   const d = await get("/api/v2/mix/market/candles", {
     symbol, productType: PT, granularity: gran, limit: String(limit),
   });
-  return (d?.data ?? []) as Candle[];
+  const out = (d?.data ?? []) as Candle[];
+  // Bitget devuelve la vela EN CURSO como la ultima fila (confirmado 16-ago-2026
+  // en el motor Python -- misma API). Usarla como si estuviera cerrada rompe
+  // cualquier calculo que compare "N velas cerradas" (retorno de divergente() en
+  // signal.ts, RVOL/direccion en impulso.ts): el volumen parcial y el cierre en
+  // movimiento no son comparables con velas completas. Se descarta si su cierre
+  // (open + duracion, en ms) todavia no llego.
+  const dur = DUR_MS[gran];
+  if (out.length && dur && Number(out[out.length - 1][0]) + dur > Date.now()) {
+    out.pop();
+  }
+  return out;
 }
 
 export async function getTicker(symbol: string): Promise<Ticker> {

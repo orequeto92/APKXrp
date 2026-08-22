@@ -6,10 +6,11 @@ import { evaluar, type Senal } from "../engine/signal.js";
 import { estadoClarity, type Clarity } from "../engine/clarity.js";
 import { detectar, slEstructural, type Lado } from "../engine/ruptura.js";
 import { señal as señalImpulso, type SeñalImpulso } from "../engine/impulso.js";
-import { getCandles } from "../engine/bitget.js";
+import { getCandles, getContratos } from "../engine/bitget.js";
 import { compute } from "../engine/ta.js";
+import { dimensionar, type Tamano } from "../engine/sizing.js";
 import { actuales } from "../config/params.js";
-import { cargar, abrir, estadisticas } from "../store/store.js";
+import { cargar, abrir, estadisticas, sistemaDe } from "../store/store.js";
 import { html, esc, precio, usd, pct, acciones, cargando } from "./comun.js";
 
 interface AvisoRuptura {
@@ -64,6 +65,7 @@ async function chequearImpulso(symbol: string, btcSymbol: string): Promise<Seña
 }
 
 let ultima: Senal | null = null;
+let ultimaImpulso: SeñalImpulso | null = null;
 
 const COLOR: Record<string, string> = {
   "TRADE": "var(--verde)", "WATCH": "var(--ambar)",
@@ -75,7 +77,7 @@ const TITULO: Record<string, string> = {
   "WAIT": "ESPERAR", "NO-TRADE": "NO SE OPERA", "ERROR": "SIN DATOS",
 };
 
-export function limpiarCache() { ultima = null; }
+export function limpiarCache() { ultima = null; ultimaImpulso = null; }
 
 export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
   raiz.innerHTML = cargando("Analizando XRP en Bitget…");
@@ -92,6 +94,7 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
       evaluar(estado.saldo, p), chequearRuptura(p.SYMBOL), chequearImpulso(p.SYMBOL, p.DIRECTOR_SYMBOL),
     ]);
     ultima = s;
+    ultimaImpulso = impulso;
   } catch (e) {
     raiz.innerHTML = html`<div class="card">
       <h2>No pude consultar Bitget</h2>
@@ -101,6 +104,19 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
     acciones(raiz, { reintentar: refrescar });
     return;
   }
+
+  // Sizing de IMPULSO: mismo motor que el sistema principal, pero el TP es el fijo
+  // del propio IMPULSO (1.5x su SL), no el tp1/tp2 de dos blancos que usa dimensionar().
+  let impulsoSizing: Tamano | null = null;
+  if (impulso) {
+    try {
+      const contrato = (await getContratos())[p.SYMBOL] || null;
+      impulsoSizing = dimensionar(impulso.entrada, impulso.sl, impulso.lado,
+        estado.saldo * impulso.entrada, p.RISK_PCT, p.LEV_MAX, contrato, p.SL_MIN_PCT, p.SL_MAX_PCT);
+    } catch { /* aviso opcional: si falla, la tarjeta se muestra sin sizing */ }
+  }
+  const abiertaPrincipal = st.abiertas.find((o) => sistemaDe(o) === "principal") || null;
+  const abiertaImpulso = st.abiertas.find((o) => sistemaDe(o) === "impulso") || null;
 
   const rsiTxt = ["4H", "1H", "15m"]
     .map((k) => (s.rsi as any)[k] == null ? "—" : Math.round((s.rsi as any)[k]))
@@ -162,17 +178,28 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
         <div class="stat"><span class="k">Entrada</span><span class="v">${precio(impulso.entrada)}</span></div>
         <div class="stat"><span class="k">SL</span><span class="v neg">${precio(impulso.sl)}</span></div>
         <div class="stat"><span class="k">TP</span><span class="v pos">${precio(impulso.tp)}</span></div>
+        ${impulsoSizing ? html`
+        <div class="stat"><span class="k">Cantidad</span><span class="v">${impulsoSizing.qty} XRP</span></div>
+        <div class="stat"><span class="k">Apalancamiento</span><span class="v">${impulsoSizing.leverage}x</span></div>
+        <div class="stat"><span class="k">Margen</span><span class="v">${(impulsoSizing.margin / impulso.entrada).toFixed(4)} XRP</span></div>
+        <div class="stat"><span class="k">Riesgo (${pct(impulsoSizing.risk_pct, 1)})</span>
+          <span class="v neg">${(impulsoSizing.risk_usd / impulso.entrada).toFixed(4)} XRP</span></div>` : ""}
       </div>
       <p class="mini mt">ATR exp ${impulso.atrExp.toFixed(2)} · Eficiencia(3) ${impulso.eff.toFixed(2)} ·
         RVOL ${impulso.rvol.toFixed(2)}. Gestión fija (sin break-even ni trailing).
         <b>Tú colocas la orden en Bitget</b> — la app nunca opera.</p>
+      ${impulsoSizing?.warnings.map((w) => `<p class="mini" style="color:var(--ambar)">⚠️ ${esc(w)}</p>`).join("") || ""}
+      ${abiertaImpulso ? html`
+        <p class="mini mt">Ya tenés una posición IMPULSO abierta (${esc(abiertaImpulso.lado.toUpperCase())}
+          desde ${precio(abiertaImpulso.entrada)}). Mírala en la pestaña Posición antes de abrir otra.</p>` : html`
+        <div class="botones"><button data-accion="registrarImpulso">Registrar que la abrí</button></div>`}
     </div>` : "";
 
-  const avisoAbierta = st.abierta ? html`
+  const avisoAbierta = abiertaPrincipal ? html`
     <div class="card" style="border-left:3px solid var(--ambar)">
-      <b>Ya tienes una posición abierta</b>
-      <p class="mini">${esc(st.abierta.lado.toUpperCase())} desde ${precio(st.abierta.entrada)} ·
-      SL ${precio(st.abierta.sl)}. Míralo en la pestaña Posición. No abras otra sin cerrarla.</p>
+      <b>Ya tienes una posición abierta (sistema principal)</b>
+      <p class="mini">${esc(abiertaPrincipal.lado.toUpperCase())} desde ${precio(abiertaPrincipal.entrada)} ·
+      SL ${precio(abiertaPrincipal.sl)}. Míralo en la pestaña Posición. No abras otra sin cerrarla.</p>
     </div>` : "";
 
   const bloqueSetup = s.decision === "TRADE" && s.sizing ? html`
@@ -251,7 +278,23 @@ export async function vistaEscaner(raiz: HTMLElement, refrescar: () => void) {
         lado: ultima.side!, entrada: ultima.entry, sl: ultima.sl!,
         tp1: ultima.tp1!, tp2: ultima.tp2!, unidades: ultima.sizing.qty,
         lev: ultima.sizing.leverage, score: ultima.score ?? null,
-        nota: "", propia: false,
+        nota: "", propia: false, sistema: "principal",
+      });
+      refrescar();
+    },
+    registrarImpulso: async () => {
+      if (!ultimaImpulso) return;
+      const contrato = (await getContratos())[p.SYMBOL] || null;
+      const sz = dimensionar(ultimaImpulso.entrada, ultimaImpulso.sl, ultimaImpulso.lado,
+        (await cargar()).saldo * ultimaImpulso.entrada, p.RISK_PCT, p.LEV_MAX, contrato,
+        p.SL_MIN_PCT, p.SL_MAX_PCT);
+      if (!sz) return;
+      // TP unico (no tp1/tp2 parcial): IMPULSO no tiene break-even ni cierre parcial.
+      await abrir({
+        lado: ultimaImpulso.lado, entrada: ultimaImpulso.entrada, sl: ultimaImpulso.sl,
+        tp1: ultimaImpulso.tp, tp2: ultimaImpulso.tp, unidades: sz.qty,
+        lev: sz.leverage, score: null, nota: "EXPERIMENTAL: sin ventaja demostrada.",
+        propia: false, sistema: "impulso",
       });
       refrescar();
     },

@@ -31,6 +31,13 @@ export interface Operacion {
   saldo_despues: number | null;
   nota: string;
   propia: boolean;            // true = decision propia, no del sistema
+  sistema?: "principal" | "impulso";   // ausente = principal (registros viejos)
+}
+
+/** Sistema que genero la operacion; los registros guardados antes de que existiera
+ * este campo son siempre del sistema principal. */
+export function sistemaDe(o: Operacion): "principal" | "impulso" {
+  return o.sistema ?? "principal";
 }
 
 export interface Estado {
@@ -41,7 +48,7 @@ export interface Estado {
 
 const CLAVE = "estado_xrp";
 
-const INICIAL: Estado = { saldo: 13.45, saldo_inicial: 13.65, operaciones: [] };
+const INICIAL: Estado = { saldo: 13.15, saldo_inicial: 13.65, operaciones: [] };
 
 async function leer(): Promise<string | null> {
   if (Capacitor.isNativePlatform()) return (await Preferences.get({ key: CLAVE })).value;
@@ -114,6 +121,7 @@ export async function borrar(id: string): Promise<Estado> {
 export interface Stats {
   total: number; cerradas: number; ganadas: number; perdidas: number;
   acierto: number; pnl: number; crecimiento: number; abierta: Operacion | null;
+  abiertas: Operacion[];    // TODAS las abiertas -- puede haber una del principal y otra de IMPULSO a la vez
 }
 
 export function estadisticas(e: Estado): Stats {
@@ -121,6 +129,7 @@ export function estadisticas(e: Estado): Stats {
   const ganadas = cerradas.filter((o) => (o.pnl_monedas || 0) > 0).length;
   const perdidas = cerradas.filter((o) => (o.pnl_monedas || 0) < 0).length;
   const pnl = cerradas.reduce((s, o) => s + (o.pnl_monedas || 0), 0);
+  const abiertas = e.operaciones.filter((o) => !o.resultado);
   return {
     total: e.operaciones.length,
     cerradas: cerradas.length,
@@ -128,6 +137,7 @@ export function estadisticas(e: Estado): Stats {
     acierto: ganadas + perdidas ? (ganadas / (ganadas + perdidas)) * 100 : 0,
     pnl,
     crecimiento: e.saldo_inicial ? (e.saldo / e.saldo_inicial - 1) * 100 : 0,
-    abierta: e.operaciones.find((o) => !o.resultado) || null,
+    abierta: abiertas[0] || null,
+    abiertas,
   };
 }
